@@ -27,8 +27,9 @@
 # THE SOFTWARE.
 #
 
+import asyncio
 
-import logging
+import adafruit_logging as logging
 from . import epdconfig
 
 # Display resolution
@@ -94,13 +95,13 @@ class EPD:
     function :Hardware reset
     parameter:
     '''
-    def reset(self):
+    async def reset(self):
         epdconfig.digital_write(self.reset_pin, 1)
-        epdconfig.delay_ms(20) 
+        await asyncio.sleep(0.02)
         epdconfig.digital_write(self.reset_pin, 0)
-        epdconfig.delay_ms(2)
+        await asyncio.sleep(0.002)
         epdconfig.digital_write(self.reset_pin, 1)
-        epdconfig.delay_ms(20)   
+        await asyncio.sleep(0.02)  
 
     '''
     function :send command
@@ -135,50 +136,50 @@ class EPD:
     function :Wait until the busy_pin goes LOW
     parameter:
     '''
-    def ReadBusy(self):
+    async def ReadBusy(self):
         logger.debug("e-Paper busy")
         while(epdconfig.digital_read(self.busy_pin) == 1):      # 0: idle, 1: busy
-            epdconfig.delay_ms(10)  
+            await asyncio.sleep(0.01)  
         logger.debug("e-Paper busy release")
 
     '''
     function : Turn On Display
     parameter:
     '''
-    def TurnOnDisplay(self):
+    async def TurnOnDisplay(self):
         self.send_command(0x22) # Display Update Control
         self.send_data(0xC7)
         self.send_command(0x20) # Activate Display Update Sequence
-        self.ReadBusy()
+        await self.ReadBusy()
     
     '''
     function : Turn On Display Part
     parameter:
     '''
-    def TurnOnDisplayPart(self):
+    async def TurnOnDisplayPart(self):
         self.send_command(0x22) # Display Update Control
-        self.send_data(0x0f)    # fast:0x0c, quality:0x0f, 0xcf
+        self.send_data(0x0c)    # fast:0x0c, quality:0x0f, 0xcf
         self.send_command(0x20) # Activate Display Update Sequence
-        self.ReadBusy()
+        await self.ReadBusy()
     
     '''
     function : Set lut
     parameter:
         lut : lut data
     '''    
-    def Lut(self, lut):
+    async def Lut(self, lut):
         self.send_command(0x32)
         for i in range(0, 153):
             self.send_data(lut[i])
-        self.ReadBusy()
+        await self.ReadBusy()
     
     '''
     function : Send lut data and configuration
     parameter:
         lut : lut data 
     '''
-    def SetLut(self, lut):
-        self.Lut(lut)
+    async def SetLut(self, lut):
+        await self.Lut(lut)
         self.send_command(0x3f)
         self.send_data(lut[153])
         self.send_command(0x03)     # gate voltage
@@ -229,15 +230,15 @@ class EPD:
     function : Initialize the e-Paper register
     parameter:
     '''
-    def init(self):
+    async def init(self):
         if (epdconfig.module_init() != 0):
             return -1
         # EPD hardware init start
-        self.reset()
+        await self.reset()
         
-        self.ReadBusy()
+        await self.ReadBusy()
         self.send_command(0x12)  #SWRESET
-        self.ReadBusy() 
+        await self.ReadBusy()
 
         self.send_command(0x01) #Driver output control      
         self.send_data(0xf9)
@@ -260,9 +261,9 @@ class EPD:
         self.send_command(0x18)
         self.send_data(0x80)
         
-        self.ReadBusy()
+        await self.ReadBusy()
         
-        self.SetLut(self.lut_full_update)
+        await self.SetLut(self.lut_full_update)
         return 0
 
     '''
@@ -291,7 +292,7 @@ class EPD:
     parameter:
         image : Image data
     '''
-    def display(self, image):
+    async def display(self, image):
         if self.width%8 == 0:
             linewidth = int(self.width/8)
         else:
@@ -301,19 +302,19 @@ class EPD:
         for j in range(0, self.height):
             for i in range(0, linewidth):
                 self.send_data(image[i + j * linewidth])   
-        self.TurnOnDisplay()
+        await self.TurnOnDisplay()
     
     '''
     function : Sends the image buffer in RAM to e-Paper and partial refresh
     parameter:
         image : Image data
     '''
-    def displayPartial(self, image):
+    async def displayPartial(self, image):
         epdconfig.digital_write(self.reset_pin, 0)
-        epdconfig.delay_ms(1)
+        await asyncio.sleep(0.001)
         epdconfig.digital_write(self.reset_pin, 1)  
         
-        self.SetLut(self.lut_partial_update)
+        await self.SetLut(self.lut_partial_update)
         self.send_command(0x37)
         self.send_data(0x00)
         self.send_data(0x00)
@@ -332,7 +333,7 @@ class EPD:
         self.send_command(0x22) 
         self.send_data(0xC0)
         self.send_command(0x20)
-        self.ReadBusy()
+        await self.ReadBusy()
 
         self.SetWindow(0, 0, self.width - 1, self.height - 1)
         self.SetCursor(0, 0)
@@ -342,26 +343,26 @@ class EPD:
         #     for i in range(0, linewidth):
         #         self.send_data(image[i + j * linewidth])   
         self.send_data2(image)  
-        self.TurnOnDisplayPart()
+        await self.TurnOnDisplayPart()
 
     '''
     function : Refresh a base image
     parameter:
         image : Image data
     '''
-    def displayPartBaseImage(self, image):
+    async def displayPartBaseImage(self, image):
         self.send_command(0x24)
         self.send_data2(image)  
                 
         self.send_command(0x26)
         self.send_data2(image)  
-        self.TurnOnDisplay()
+        await self.TurnOnDisplay()
     
     '''
     function : Clear screen
     parameter:
     '''
-    def Clear(self, color=0xFF):
+    async def Clear(self, color):
         if self.width%8 == 0:
             linewidth = int(self.width/8)
         else:
@@ -370,17 +371,17 @@ class EPD:
         
         self.send_command(0x24)
         self.send_data2([color] * int(self.height * linewidth))  
-        self.TurnOnDisplay()
+        await self.TurnOnDisplay()
 
     '''
     function : Enter sleep mode
     parameter:
     '''
-    def sleep(self):
+    async def sleep(self):
         self.send_command(0x10) #enter deep sleep
         self.send_data(0x01)
         
-        epdconfig.delay_ms(2000)
+        await asyncio.sleep(2)
         epdconfig.module_exit()
 
 ### END OF FILE ###
