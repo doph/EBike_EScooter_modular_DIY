@@ -84,7 +84,7 @@ class Vesc(object):
         """Read VESC motor data and update vesc_motor_data"""
         # COMM_GET_VALUES = 4; 79 bytes response
         command = bytearray([4])
-        response = self._pack_and_send(command, 79)
+        response = self._pack_and_send(command, 78)
 
         if response is not None:
             # print(",".join(["{}".format(i) for i in response]))
