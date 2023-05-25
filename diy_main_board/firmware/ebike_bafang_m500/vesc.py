@@ -18,10 +18,8 @@ class Vesc(object):
             uart_rx_pin,
             baudrate = 115200, # VESC UART baudrate
             timeout = 0.005, # 5ms is enough for reading the UART
-            receiver_buffer_size = 512) # VESC PACKET_MAX_PL_LEN = 512
-        
-        #  let's initialize with no brake current as this is a mid drive motor
-        self.set_motor_current_brake_amps(0)
+            # NOTE: on CircuitPyhton 8.1.0-beta.2, a value of 512 will make the board to reboot if wifi wireless workflow is not connected
+            receiver_buffer_size = 1024) # VESC PACKET_MAX_PL_LEN = 512
 
     # code taken from:
     # https://gist.github.com/oysstu/68072c44c02879a2abf94ef350d1c7c6
@@ -54,6 +52,10 @@ class Vesc(object):
             crc &= 0xFFFF                                   # important, crc must stay 16bits all the way through
 
         return crc
+    
+    def _uart_maybe_reset_input_buffer(self):
+        if self._uart.in_waiting:
+            self._uart.reset_input_buffer()
 
     def _pack_and_send(self, buf, response_len):
 
@@ -69,13 +71,50 @@ class Vesc(object):
         data_array[package_len - 3] = (crc & 0xff00) >> 8
         data_array[package_len - 2] = crc & 0x00ff
         data_array[package_len - 1] = 3
-
+        
         # send packet to UART
         self._uart.write(data_array)
-        
+
         # try to read response only if we expect it
-        if response_len is not 0:
+        if response_len > 0:
             data = self._uart.read(response_len)  # read up to response_len bytes
+
+            if (data is None):
+                self._uart_maybe_reset_input_buffer()
+                return 
+            
+            # the data must have the lenght we are expecting, otherwise discard
+            if (len(data) != response_len):
+                print("VESC: response length is not the expected, recieved length: " + str(len(data)) + " expected: " + str(response_len))
+                self._uart_maybe_reset_input_buffer()
+                return None
+
+            # check for expected packet lenght ID = 2
+            if data[0] != 2:
+                print("VESC: response packet 0 is not the expected, received: " + str(data[0]) + " expected: 2")
+                self._uart_maybe_reset_input_buffer()
+                return None
+            
+            # check for expected packet lenght = 73
+            if data[1] != 73:
+                print("VESC: response packet lenght is not the expected, received: " + str(data[1]) + " expected: 73")
+                self._uart_maybe_reset_input_buffer()
+                return None
+            
+            # check for expected COMM_GET_VALUES = 4
+            if data[2] != 4:
+                print("VESC: response packet COMM_GET_VALUES is not the expected, received: " + str(data[2]) + " expected: 4")
+                self._uart_maybe_reset_input_buffer()
+                return None
+            
+            # check for CRC
+            crc_calculated = self._crc16(data[2:-3])
+            crc = (data[-3] * 256) + data[-2]
+            if crc != crc_calculated:
+                self._uart_maybe_reset_input_buffer()
+                return None
+            
+            self._uart_maybe_reset_input_buffer()
             return data
         else:
             return None
@@ -85,6 +124,7 @@ class Vesc(object):
         # COMM_GET_VALUES = 4; 79 bytes response
         command = bytearray([4])
         response = self._pack_and_send(command, 78)
+        #print(response)
 
         if response is not None:
             # print(",".join(["{}".format(i) for i in response]))
