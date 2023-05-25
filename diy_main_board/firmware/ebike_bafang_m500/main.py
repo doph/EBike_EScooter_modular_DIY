@@ -6,7 +6,7 @@ import simpleio
 import asyncio
 import ebike_data
 import throttle
-import brake
+import brake_sensor
 import wheel_speed_sensor
 import torque_sensor
 import motor_temperature_sensor
@@ -22,13 +22,13 @@ import esp32
 torque_sensor_weight_min_to_start_x10 = 40 # (value in kgs) let's avoid any false startup, we will need this minimum weight on the pedals to start
 torque_sensor_weight_max_x10 = 400 # torque sensor max value is 40 kgs. Let's use the max range up to 40 kgs
 
-motor_min_current_start = 1.5 # to much lower value will make the motor vibrate and not run, so, impose a min limit (??)
-motor_max_current_limit = 15.0 # max value, be carefull to not burn your motor
+motor_min_current_start = 2 # to much lower value will make the motor vibrate and not run, so, impose a min limit (??)
+motor_max_current_limit = 30.0 # max value, be carefull to not burn your motor
 
-ramp_up_time = 0.1 # ram up time for each 1A
-ramp_down_time = 0.05 # ram down time for each 1A
+ramp_up_time = 0.05 # ram up time for each 1A
+ramp_down_time = 0.04 # ram down time for each 1A
 
-throttle_enable = False # should throttle be used?
+throttle_enable = True # should throttle be used?
 
 cranck_lenght_mm = 170
 
@@ -37,49 +37,28 @@ enable_print_ebike_data_to_terminal = False
 enable_debug_log_cvs = False
 
 ###############################################
-
-assist_level_factor_table = [
-    0,
-    0.13,
-    0.16,
-    0.20,
-    0.24,
-    0.31,
-    0.38,
-    0.48,
-    0.60,
-    0.75,
-    0.93,
-    1.16,
-    1.46,
-    1.82,
-    2.27,
-    2.84,
-    3.55,
-    4.44,
-    5.55,
-    6.94,
-    8.67
-]
+#                            0   1     2    3    4    5  
+assist_level_factor_table = [0, 0.5, 1.0, 2.0, 3.0, 5.0]
 
 # open file for log data
 if enable_debug_log_cvs:
     log = open("/log_csv.txt", "w")
 
-brake = brake.Brake(
+brake_sensor = brake_sensor.BrakeSensor(
    board.IO10) # brake sensor pin
 
 wheel_speed_sensor = wheel_speed_sensor.WheelSpeedSensor(
    board.IO46) # wheel speed sensor pin
 
 torque_sensor = torque_sensor.TorqueSensor(
-    board.IO4, # CAN tx pin
-    board.IO5) # CAN rx pin
+    board.IO21, # CAN tx pin
+    board.IO47) # CAN rx pin
   
 throttle = throttle.Throttle(
     board.IO18, # ADC pin for throttle
-    min = 19000, # min ADC value that throttle reads, plus some margin
-    max = 50000) # max ADC value that throttle reads, minus some margin
+    min = 17500, # min ADC value that throttle reads, plus some margin
+    max = 50500) # max ADC value that throttle reads, minus some margin
+throttle_over_max_error = 58000 # if throttle value is over this value, something is wrong, so, stop the motor
 
 motor_temperature_sensor = motor_temperature_sensor.MotorTemperatureSensor(
    board.IO3) # motor temperature sensor pin
@@ -88,8 +67,8 @@ esp32 = esp32.ESP32()
 
 ebike = ebike_data.EBike()
 vesc = vesc.Vesc(
-    board.IO13, # UART TX pin tebike_app_datahat connect to VESC
-    board.IO14, # UART RX pin that connect to VESC
+    board.IO14, # UART TX pin tebike_app_datahat connect to VESC
+    board.IO13, # UART RX pin that connect to VESC
     ebike) #VESC data object to hold the VESC data
 
 display = display.Display(
@@ -100,13 +79,13 @@ display = display.Display(
 def check_brakes():
     """Check the brakes and if they are active, set the motor current to 0
     """
-    if ebike.brakes_are_active == False and brake.value == True:
+    if ebike.brakes_are_active == False and brake_sensor.value == True:
         # brake / coast the motor
         vesc.brake()
         ebike.motor_current_target = 0
         ebike.brakes_are_active = True
       
-    elif ebike.brakes_are_active == True and brake.value == False:
+    elif ebike.brakes_are_active == True and brake_sensor.value == False:
         ebike.brakes_are_active = False
 
 def print_ebike_data_to_terminal():
@@ -118,11 +97,11 @@ def print_ebike_data_to_terminal():
     if ebike.motor_current < 0:
        ebike.motor_current = 0
   
-    # print(f" {ebike.motor_current_target:2.1f} | {ebike.motor_current:2.1f} | {ebike.battery_current:2.1f}", end='\r')
-    # print(f" {ebike.torque_weight: 2.1f} | {ebike.cadence: 3}", end='\r')
-    # print(f"{throttle.adc_value:6} | {(throttle.value / 10.0):2.1f} %", end='\r')
-    # print(f" {ebike.motor_current:2.1f} | {ebike.battery_current:2.1f} | {ebike.battery_voltage:2.1f} | {int(ebike.motor_power)}")
-    print(f"{(esp32.temperature_x10 / 10.0):3.1f} | {(ebike.vesc_temperature_x10 / 10.0):3.1f} | {(motor_temperature_sensor.value_x10  / 10.0):3.1f}")
+    #print(f" m_cur_t {ebike.motor_current_target:2.1f} | m_cur {ebike.motor_current:2.1f} | b_cur {ebike.battery_current:2.1f}", end='\r')
+    #print(f" trq {ebike.torque_weight_x10: 2.1f} | cad {ebike.cadence: 3} | wheel {ebike.wheel_speed}", end='\r')
+    print(f"b_v {ebike.battery_voltage:2.1f} | thr {throttle.adc_value:6} | thr {(throttle.value / 10.0):2.1f} %", end='\n')
+    #print(f"mot_cur {ebike.motor_current:2.1f} | b_cur {ebike.battery_current:2.1f} | b_v {ebike.battery_voltage:2.1f} | m_p {int(ebike.motor_power)}")
+    #print(f"esp temp {(esp32.temperature_x10 / 10.0):3.1f} | vesc temp {(ebike.vesc_temperature_x10 / 10.0):3.1f} | {(motor_temperature_sensor.value_x10  / 10.0):3.1f}")
     
 def utils_step_towards(current_value, target_value, step):
     """ Move current_value towards the target_value, by increasing / decreasing by step
@@ -147,7 +126,7 @@ async def task_log_data():
     while True:
         # log data to local file system CSV file
         brake = 0
-        if brake.value:
+        if brake_sensor.value:
             brake = 1
         log.write(f"{ebike.torque_weight_x10:.1f},{ebike.cadence},{brake},{ebike.battery_current:.1f},{ebike.motor_current:.1f}\n")
         print(supervisor.ticks_ms())
@@ -163,7 +142,7 @@ async def task_log_data():
 async def task_display_process_data():
     while True:
         # are breaks active and we should disable the motor?
-        check_brakes()
+        #check_brakes()
 
         # need to process display data periodically
         display.process_data()
@@ -174,7 +153,7 @@ async def task_display_process_data():
 async def task_display_send_data():
     while True:
         # are breaks active and we should disable the motor?
-        check_brakes()
+        #check_brakes()
 
         # need to process display data periodically
         display.send_data()
@@ -185,7 +164,7 @@ async def task_display_send_data():
 async def task_vesc_heartbeat():
     while True:
         # are breaks active and we should disable the motor?
-        check_brakes()
+        #check_brakes()
         
         # VESC heart beat must be sent more frequently than 1 second, otherwise the motor will stop
         vesc.send_heart_beat()
@@ -249,8 +228,8 @@ def calculate_human_pedal_power(torque_weight, cadence, cranck_lenght_mm):
 
         # need to reset this
         pedal_human_power__average_counter = 0
-
-    return pedal_human_power__temp_x10
+    #print("human power: ", pedal_human_power__temp_x10 / 10.0)
+    return int(pedal_human_power__temp_x10 / 10.0)
 
 motor_current_target__torque_sensor = 0
 def motor_control():
@@ -263,7 +242,7 @@ def motor_control():
         # store values for later usage if needed
         ebike.torque_weight_x10 = torque_weight_x10
         ebike.cadence = cadence
-        # ebike.human_pedal_power = calculate_human_pedal_power(ebike.torque_weight_x10, ebike.cadence, cranck_lenght_mm)
+        #ebike.human_pedal_power = calculate_human_pedal_power(ebike.torque_weight_x10, ebike.cadence, cranck_lenght_mm)
         
         # map torque value to motor current
         motor_current_target__torque_sensor = simpleio.map_range(
@@ -283,7 +262,7 @@ def motor_control():
 
     # map throttle value to motor current
     motor_current_target__throttle = 0
-    if throttle_enable == True:
+    if throttle_enable == True and throttle.adc_value < throttle_over_max_error:
         # map torque value to motor current
         motor_current_target__throttle = simpleio.map_range(
             throttle.value,
@@ -301,6 +280,10 @@ def motor_control():
 
     # impose a min motor current value, as to much lower value will make the motor vibrate and not run (??)
     if motor_current_target < motor_min_current_start:
+        motor_current_target = 0
+
+    # provide a quick way to disable the motor
+    if ebike.assist_level == 0:
         motor_current_target = 0
 
     # apply ramp up / down factor: faster when ramp down
@@ -333,7 +316,7 @@ def motor_control():
 async def task_read_sensors_control_motor():
     while True:
         # are breaks active and we should disable the motor?
-        check_brakes()
+        #check_brakes() # no brake sensor
 
         # motor control
         motor_control()
@@ -341,30 +324,66 @@ async def task_read_sensors_control_motor():
         # idle 20ms
         await asyncio.sleep(0.02)
 
+
+import math
+WHEEL_DIAMETER_M = 0.74  # diameter in meters, adjust as necessary
+WHEEL_CIRCUMFERENCE_M = WHEEL_DIAMETER_M * math.pi
+WHEEL_CIRCUMFERENCE_MILES = WHEEL_CIRCUMFERENCE_M * 0.000621371
+
+async def task_calculate_speed():
+    last_activation_time = None
+
+    while True:
+        # wait for the sensor to be triggered
+        while not wheel_speed_sensor.value:
+            await asyncio.sleep(0.01)
+
+        if last_activation_time is not None:
+            # calculate the time difference in hours
+            rotation_time = time.monotonic_ns() - last_activation_time  # time in nanoseconds
+            rotation_time_hours = rotation_time / (3600.0 * 10**9)  # convert from ns to hours
+
+            # speed in mph
+            speed_mph = WHEEL_CIRCUMFERENCE_MILES / rotation_time_hours
+            ebike.speed = int(speed_mph)
+            #print(f"Speed: {ebike.speed} mph")
+
+        last_activation_time = time.monotonic_ns()
+
+        # wait for the sensor to be reset before the next loop iteration
+        while wheel_speed_sensor.value:
+            await asyncio.sleep(0.001)
+
+
 async def main():
 
     print("starting")
 
-    vesc_heartbeat_task = asyncio.create_task(task_vesc_heartbeat())
-    read_sensors_control_motor_task = asyncio.create_task(task_read_sensors_control_motor())
-    display_process_data_task = asyncio.create_task(task_display_process_data())
-    display_send_data_task = asyncio.create_task(task_display_send_data())
+    #vesc_heartbeat_task = asyncio.create_task(task_vesc_heartbeat())
+    #read_sensors_control_motor_task = asyncio.create_task(task_read_sensors_control_motor())
+    #display_process_data_task = asyncio.create_task(task_display_process_data())
+    #display_send_data_task = asyncio.create_task(task_display_send_data())
+    #calculate_speed_task = asyncio.create_task(task_calculate_speed())
 
     # Start the tasks. Note that log_data_task may be disabled as a configuration
     if enable_debug_log_cvs == False:
         await asyncio.gather(
-            vesc_heartbeat_task,
-            read_sensors_control_motor_task,
-            display_process_data_task,
-            display_send_data_task)
+            task_vesc_heartbeat(),
+            task_read_sensors_control_motor(),
+            task_display_process_data(),
+            task_display_send_data(),
+            #task_calculate_speed(),
+            )
     else:
-        log_data_task = asyncio.create_task(task_log_data())
+        #log_data_task = asyncio.create_task(task_log_data())
         await asyncio.gather(
-            vesc_heartbeat_task,
-            read_sensors_control_motor_task,
-            display_process_data_task,
-            display_send_data_task,
-            log_data_task)
+            task_vesc_heartbeat(),
+            task_read_sensors_control_motor(),
+            task_display_process_data(),
+            task_display_send_data(),
+            task_calculate_speed(),
+            task_log_data(),
+            )
   
     print("done main()")
 
