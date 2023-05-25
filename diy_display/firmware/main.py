@@ -8,7 +8,7 @@ from ebike_board import EBikeBoard
 from ebike_display import EBikeDisplay
 
 
-ASSIST_MAX_LEVEL = 9
+ASSIST_MAX_LEVEL = 5
 
 ebike_data = EBike()
 ebike = EBikeBoard(
@@ -59,8 +59,8 @@ async def task_display_update():
         # high priority updates
         if ebike_data.assist_level != prev_assist_level or\
            ebike_data.motor_current != prev_motor_current or\
-           (now - prev_update) > 10.0:
-            # assist and current are high priority, everything else on 1 sec interval
+           (now - prev_update) > 8.0:
+            # assist and current are high priority, everything else on 8 sec interval
             prev_assist_level = ebike_data.assist_level
             prev_motor_current = ebike_data.motor_current
             prev_update = now

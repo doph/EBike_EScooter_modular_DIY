@@ -6,6 +6,8 @@ class WaveshareFramebuffer(adafruit_framebuf.FrameBuffer):
 
     def __init__(self, epd, background_img):
         self.epd = epd
+        self.counter = 0
+        self.full_update_every = 300
 
         # prealloc for when we write the display
         self._buf = bytearray(1)
@@ -49,5 +51,13 @@ class WaveshareFramebuffer(adafruit_framebuf.FrameBuffer):
             for i, v in enumerate(self.buffer):
                 self.buffer[i] = v & self.bg_buf[i]
         
-        await self.epd.displayPartial(self.buffer)
+        if self.counter >= self.full_update_every:
+            await self.epd.display(self.bg_buf)
+            await self.epd.displayPartBaseImage(self.bg_buf)
+            await self.epd.displayPartial(self.buffer)
+
+            self.counter = 0
+        else:
+            await self.epd.displayPartial(self.buffer)
+            self.counter += 1
 
