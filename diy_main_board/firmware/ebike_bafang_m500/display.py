@@ -153,16 +153,31 @@ class Display(object):
         # self._tx_array[3] - this is the lenght byte
         _len = 4 # start bytes + len byte
 
-        data_pack_offset = 3 # this offset means the data bytes will never be lower than this value. And this value is then only used on the start bytes (may be on the CRC)
-        struct.pack_into('<H', self._tx_array, 4, data_pack_offset + int(self._ebike_data.battery_voltage * 100))
-        self._tx_array[6] = data_pack_offset + int(self._ebike_data.battery_current * 5)
-        struct.pack_into('<H', self._tx_array, 7, data_pack_offset + int(self._ebike_data.motor_power))
-        struct.pack_into('<H', self._tx_array, 9, data_pack_offset + int(self._ebike_data.vesc_temperature_x10))
-        struct.pack_into('<H', self._tx_array, 11, data_pack_offset + int(self._ebike_data.motor_temperature_sensor_x10))
-        self._tx_array[13] = data_pack_offset + self._ebike_data.vesc_fault_code
-        self._tx_array[14] = data_pack_offset + self._ebike_data.brakes_are_active
+        if self._ebike_data.vesc_fault_code != 0:
+            print('vesc error code', self._ebike_data.vesc_fault_code)
         
-        _len += 11 # add the number of previous added bytes
+        self._ebike_data.battery_voltage = int(max(0, min(127, self._ebike_data.battery_voltage)))
+        self._ebike_data.vesc_temperature_x10 = int(max(0, min(254, self._ebike_data.vesc_temperature_x10)))
+        self._ebike_data.motor_temperature_sensor_x10 = int(max(0, min(254, self._ebike_data.motor_temperature_sensor_x10)))
+        #self._ebike_data.battery_current = int(max(0, min(254, self._ebike_data.battery_current)))
+        self._ebike_data.motor_current = int(max(0, min(127, self._ebike_data.motor_current)))
+        self._ebike_data.motor_power = int(max(0, min(5000, self._ebike_data.motor_power)))
+        self._ebike_data.cadence = int(max(0, min(99, self._ebike_data.cadence)))
+        self._ebike_data.speed = int(max(0, min(99, self._ebike_data.speed)))
+        #self._ebike_data.human_pedal_power = int(max(0, min(999, self._ebike_data.human_pedal_power)))
+
+        data_pack_offset = 3 # this offset means the data bytes will never be lower than this value. And this value is then only used on the start bytes (may be on the CRC)
+        struct.pack_into('<H', self._tx_array, 4, data_pack_offset + self._ebike_data.battery_voltage)
+        self._tx_array[6] = data_pack_offset + self._ebike_data.motor_current
+        struct.pack_into('<H', self._tx_array, 7, data_pack_offset + self._ebike_data.motor_power)
+        struct.pack_into('<H', self._tx_array, 9, data_pack_offset + self._ebike_data.vesc_temperature_x10)
+        struct.pack_into('<H', self._tx_array, 11, data_pack_offset + self._ebike_data.motor_temperature_sensor_x10)
+        self._tx_array[13] = data_pack_offset + self._ebike_data.vesc_fault_code
+        self._tx_array[14] = data_pack_offset + self._ebike_data.cadence
+        self._tx_array[15] = data_pack_offset + self._ebike_data.speed
+        #struct.pack_into('<H', self._tx_array, 16, data_pack_offset + self._ebike_data._ebike_data.human_pedal_power)
+
+        _len += 12 # add the number of previous added bytes
         self._tx_array[3] = _len
 
         # calculate the CRC

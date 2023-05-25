@@ -3,8 +3,8 @@ from display.epd2in13_V3 import EPD
 from display.framebuffer import WaveshareFramebuffer
 
 
-MAX_CURRENT = 35
-MAX_BATTERY_VOLTS = 58
+MAX_CURRENT = 30
+MAX_BATTERY_VOLTS = 54
 MIN_BATTERY_VOLTS = 44
 
 def motor_power_round(motor_power):
@@ -46,7 +46,7 @@ class EBikeDisplay():
         self.framebuf.fill(1)
 
         max_bar_height = 110
-        current_bar_height = int((ebike_data.motor_current / MAX_CURRENT) * max_bar_height)
+        current_bar_height = int(min((ebike_data.motor_current / MAX_CURRENT),1.0) * max_bar_height)
         battery_bar_height = int(((ebike_data.battery_voltage - MIN_BATTERY_VOLTS) / (MAX_BATTERY_VOLTS - MIN_BATTERY_VOLTS)) * max_bar_height)
         self.framebuf.rect(2, 112-current_bar_height, 29, current_bar_height, 0, fill=True)
         self.framebuf.rect(219, 112-battery_bar_height, 29, battery_bar_height, 0, fill=True)
@@ -55,20 +55,20 @@ class EBikeDisplay():
         self.framebuf.text(f"{ebike_data.battery_voltage:2}", 222, 93, -1, size=2)
 
         self.framebuf.text(str(ebike_data.assist_level), 112, 7, 0, size=5)
-        self.framebuf.text("00", 108, 101, 0, size=3)
+        self.framebuf.text(f"{ebike_data.speed:2}", 108, 101, 0, size=3)
         
         self.framebuf.text(f"{motor_power_round(ebike_data.motor_power):3}", 48, 14, 0, size=2)
-        self.framebuf.text(f"{human_power(ebike_data): 3}", 167, 14, 0, size=2)
+        self.framebuf.text(f"{ebike_data.human_pedal_power:3}", 167, 14, 0, size=2)
 
         # "{(ebike_data.vesc_temperature_x10 / 10.0): 2}"
-        self.framebuf.text(f"{(ebike_data.motor_temperature_sensor_x10 / 10.0): 2}", 55, 90, 0, size=2)
+        self.framebuf.text(f"{int(ebike_data.motor_temperature_sensor_x10 / 10.0): 2}", 45, 90, 0, size=2)
         self.framebuf.text(f"{ebike_data.cadence: 2}", 173, 90, 0, size=2)
 
         if ebike_data.brakes_are_active:
-            self.framebuf.text("brakes", 113, 80, 0, size=2)
+            self.framebuf.text("brakes", 100, 70, 0, size=1)
 
         if ebike_data.vesc_fault_code:
-            self.framebuf.text(f"mot e: {ebike_data.vesc_fault_code}", 113, 80, 0, size=2)
+            self.framebuf.text(f"mot e: {ebike_data.vesc_fault_code}", 100, 70, 0, size=1)
 
         await self.framebuf.show()
 

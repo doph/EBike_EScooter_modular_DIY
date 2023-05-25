@@ -129,13 +129,15 @@ class EBikeBoard(object):
     def _process_data(self):
         if self._rx_package.received == True:
             data_pack_offset = 3 # this offset means the data bytes will never be lower than this value. And this value is then only used on the start bytes (may be on the CRC)
-            self._ebike_data.battery_voltage = (struct.unpack_from('<H', self._rx_package.data, 4)[0] - data_pack_offset) / 100.0
-            self._ebike_data.battery_current = (self._rx_package.data[6] - data_pack_offset) / 5.0
+            self._ebike_data.battery_voltage = (struct.unpack_from('<H', self._rx_package.data, 4)[0] - data_pack_offset)
+            self._ebike_data.motor_current = (self._rx_package.data[6] - data_pack_offset)
             self._ebike_data.motor_power = (struct.unpack_from('<H', self._rx_package.data, 7)[0] - data_pack_offset)
             self._ebike_data.vesc_temperature_x10 = (struct.unpack_from('<H', self._rx_package.data, 9)[0] - data_pack_offset)
             self._ebike_data.motor_temperature_sensor_x10 = (struct.unpack_from('<H', self._rx_package.data, 11)[0] - data_pack_offset)
             self._ebike_data.vesc_fault_code = (self._rx_package.data[13] - data_pack_offset)
-            self._ebike_data.brakes_are_active = (self._rx_package.data[14] - data_pack_offset)
+            self._ebike_data.cadence = (self._rx_package.data[14] - data_pack_offset)
+            self._ebike_data.speed = (self._rx_package.data[15] - data_pack_offset)
+            #self._ebike_data.human_pedal_power = (struct.unpack_from('<H', self._rx_package.data, 16)[0] - data_pack_offset)
 
             self._rx_package.received = False # signal that next package can be processed
                 

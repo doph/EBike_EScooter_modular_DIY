@@ -44,15 +44,16 @@ class TorqueSensor(object):
         with self._can_bus.listen(timeout=1.0) as listener:
             
             msg = bytearray()
-            cadence = None
+            cadence = 0
             torque = None
+            torque_x10 = 0
             now = time.monotonic()
             counter = 0
 
             while True:
                 if listener.in_waiting():
                     msg = listener.receive()
-
+                    
                     cadence = msg.data[2]
                     if cadence > 0:
                         # we got a new cadence value
